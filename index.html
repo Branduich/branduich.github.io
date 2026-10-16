@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Demo braccialetto NFC</title>
+<style>
+  :root{
+    --bg:#16233A; --surface:#1F3050; --surface2:#2A3E63;
+    --cream:#FAF8F3; --muted:#9FB0CC; --line:#36486E;
+    --accent:#E8703F; --accent-dim:#8A4326;
+    --teal:#3FA88F; --teal-dim:#1E5A4C;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--cream);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    min-height:100vh; display:flex; flex-direction:column;
+    font-size:17px; line-height:1.5;
+  }
+  .bar{
+    display:flex; align-items:center; gap:10px;
+    padding:12px 16px; border-bottom:1px solid var(--line);
+    position:sticky; top:0; background:var(--bg); z-index:5;
+  }
+  .station{
+    font-size:13px; letter-spacing:1.5px; text-transform:uppercase;
+    color:var(--accent); font-weight:600; flex:1;
+  }
+  .ghost{
+    background:none; border:1px solid var(--line); color:var(--muted);
+    border-radius:8px; padding:7px 12px; font-size:13px; cursor:pointer;
+    font-family:inherit;
+  }
+  .ghost:active{background:var(--surface)}
+  main{flex:1; padding:20px 16px 8px; max-width:560px; width:100%; margin:0 auto}
+  h1{font-size:30px; line-height:1.2; margin:0 0 6px; font-weight:600}
+  h2{font-size:21px; margin:26px 0 12px; font-weight:600}
+  p{margin:0 0 14px; color:var(--muted)}
+  p.lead{color:var(--cream); font-size:19px}
+  .card{
+    background:var(--surface); border:1px solid var(--line);
+    border-radius:14px; padding:18px; margin-bottom:12px;
+  }
+  .card.hi{border-color:var(--accent)}
+  .card.ok{border-color:var(--teal)}
+  .row{display:flex; justify-content:space-between; align-items:baseline; gap:12px}
+  .row + .row{margin-top:10px; padding-top:10px; border-top:1px solid var(--line)}
+  .who{color:var(--accent); font-weight:600}
+  .num{font-variant-numeric:tabular-nums; white-space:nowrap}
+  .big{font-size:52px; font-weight:600; font-variant-numeric:tabular-nums; line-height:1.1}
+  .tiny{font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:1.2px}
+  .pill{
+    display:inline-block; background:var(--surface2); border-radius:999px;
+    padding:5px 13px; font-size:14px; margin:0 6px 6px 0;
+  }
+  .pill.on{background:var(--teal-dim); color:#C9F0E4}
+  button.act{
+    display:block; width:100%; text-align:left; font-family:inherit;
+    background:var(--surface); color:var(--cream);
+    border:1px solid var(--line); border-radius:14px;
+    padding:18px; font-size:19px; font-weight:500; margin-bottom:10px;
+    cursor:pointer;
+  }
+  button.act:active{background:var(--surface2)}
+  button.act.warn{border-color:var(--accent-dim); color:#FFC4A8}
+  button.act small{display:block; font-size:14px; color:var(--muted); font-weight:400; margin-top:3px}
+  .tapzone{
+    border:2px dashed var(--line); border-radius:16px; padding:26px 18px;
+    text-align:center; color:var(--muted); margin-bottom:16px;
+  }
+  .tapzone strong{display:block; color:var(--cream); font-size:19px; margin-bottom:4px; font-weight:600}
+  footer{
+    border-top:1px solid var(--line); padding:14px 16px 26px;
+    max-width:560px; width:100%; margin:0 auto;
+  }
+  footer summary{
+    cursor:pointer; font-size:13px; color:var(--muted);
+    text-transform:uppercase; letter-spacing:1.2px; padding:4px 0;
+  }
+  .grid{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px}
+  .grid button{
+    flex:1 1 calc(50% - 4px); font-family:inherit; font-size:15px;
+    background:var(--surface); color:var(--cream); border:1px solid var(--line);
+    border-radius:10px; padding:12px 8px; cursor:pointer;
+  }
+  .grid button:active{background:var(--surface2)}
+  .grid button.st{border-color:var(--accent-dim); color:#FFC4A8}
+  code{
+    display:block; background:#0E1829; border:1px solid var(--line);
+    border-radius:8px; padding:9px 11px; font-size:12px; margin:5px 0 11px;
+    word-break:break-all; color:#9FD8C8; font-family:ui-monospace,Menlo,Consolas,monospace;
+  }
+  .note{font-size:14px; color:var(--muted); margin-top:14px}
+  .err{color:#FFB0A0; font-size:14px; margin-top:10px}
+  @media (min-width:600px){ h1{font-size:36px} .big{font-size:64px} }
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <span class="station" id="stationLabel">—</span>
+  <button class="ghost" id="btnReset">Azzera</button>
+</div>
+
+<main id="app"></main>
+
+<footer>
+  <details id="panel">
+    <summary>Comandi demo e configurazione tag</summary>
+
+    <p class="note" id="nfcNote">Lettura NFC continua: non disponibile su questo browser. Usa i tag come link, oppure i pulsanti qui sotto.</p>
+    <button class="ghost" id="btnNfc" style="display:none">Avvia lettura NFC continua</button>
+
+    <h2 style="font-size:15px;margin:18px 0 0">Simula una postazione</h2>
+    <div class="grid" id="gridStations"></div>
+
+    <h2 style="font-size:15px;margin:18px 0 0">Simula un braccialetto</h2>
+    <div class="grid" id="gridBands"></div>
+
+    <h2 style="font-size:15px;margin:22px 0 8px">URL da scrivere sui tag</h2>
+    <p class="note" style="margin-top:0">In NFC Tools: Scrivi → Aggiungi un record → URL / URI, e incolla una di queste righe.</p>
+    <div id="tagList"></div>
+  </details>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  var STATIONS = {
+    desk:   "Desk accoglienza",
+    totem:  "Totem di benvenuto",
+    lane7:  "Pista 7",
+    table3: "Biliardo 3",
+    exit:   "Uscita"
+  };
+  var BANDS = ["g1","g2","g3","g4"];
+  var NICKS = ["Drago Blu","Falco Rosso","Lupo Verde","Orso Giallo"];
+  var MENU = [
+    {k:"birra",  n:"Birra media", p:6},
+    {k:"burger", n:"Burger",      p:14},
+    {k:"nachos", n:"Nachos",      p:11},
+    {k:"caraffa",n:"Caraffa 1L",  p:18}
+  ];
+  var RATE = 0.60; // euro al minuto di pista
+
+  var BOOKING = { name:"Famiglia Rossi", people:4, lane:"Pista 7", time:"19:00" };
+
+  // ---------- stato ----------
+  var mem = null;
+  var KEY = "fecDemoV1";
+
+  function blank(){
+    return {
+      station:"desk",
+      bands:{},        // g1 -> {nick, idx}
+      players:[],      // id dei braccialetti in pista
+      openedAt:null,
+      closedAt:null,
+      orders:[],       // {by, item, price}
+      view:null,       // null | "menu" | "order" | "bill" | "addplayer"
+      actor:null,      // ultimo braccialetto che ha tappato
+      flash:null
+    };
+  }
+  function load(){
+    try{
+      var raw = localStorage.getItem(KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return mem || blank();
+  }
+  function save(s){
+    mem = s;
+    try{ localStorage.setItem(KEY, JSON.stringify(s)); }catch(e){}
+  }
+  var S = load();
+
+  // ---------- utilità ----------
+  function esc(t){
+    return String(t).replace(/[&<>"]/g, function(c){
+      return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c];
+    });
+  }
+  function nickOf(id){ return S.bands[id] ? S.bands[id].nick : null; }
+  function minutes(){
+    if(!S.openedAt) return 0;
+    var end = S.closedAt || Date.now();
+    return Math.max(1, Math.round((end - S.openedAt)/60000));
+  }
+  function laneCost(){ return minutes() * RATE; }
+  function ordersTotal(){
+    return S.orders.reduce(function(a,o){ return a + o.price; }, 0);
+  }
+  function eur(v){ return v.toFixed(2).replace(".", ",") + " €"; }
+
+  // ---------- il tap ----------
+  function tapStation(id){
+    if(!STATIONS[id]) return;
+    S.station = id; S.view = null; S.actor = null; S.flash = null;
+    save(S); render();
+  }
+
+  function tapBand(id){
+    if(BANDS.indexOf(id) < 0) return;
+    S.actor = id; S.flash = null;
+
+    if(S.station === "desk"){
+      if(!S.bands[id]){
+        var n = Object.keys(S.bands).length;
+        S.bands[id] = { nick: NICKS[n % NICKS.length], idx: n };
+        S.flash = "Braccialetto associato";
+      } else {
+        S.flash = "Già associato";
+      }
+      S.view = null;
+    }
+    else if(!S.bands[id]){
+      S.flash = "Braccialetto non attivo — passa dal desk";
+      S.view = null;
+    }
+    else if(S.station === "totem"){
+      S.view = null;
+    }
+    else if(S.station === "lane7"){
+      if(S.closedAt){
+        S.view = null;
+      } else if(S.players.indexOf(id) < 0){
+        S.players.push(id);
+        if(!S.openedAt) S.openedAt = Date.now();
+        S.flash = "Giocatore aggiunto";
+        S.view = null;
+      } else {
+        S.view = "menu";
+      }
+    }
+    else if(S.station === "table3"){
+      S.view = null;
+    }
+    else if(S.station === "exit"){
+      S.view = null;
+    }
+    save(S); render();
+  }
+
+  function dispatchHash(h){
+    if(!h) return false;
+    h = h.replace(/^#/, "");
+    var m = /^s=([a-z0-9]+)$/i.exec(h);
+    if(m){ tapStation(m[1]); return true; }
+    m = /^w=([a-z0-9]+)$/i.exec(h);
+    if(m){ tapBand(m[1]); return true; }
+    return false;
+  }
+
+  // ---------- schermate ----------
+  function viewDesk(){
+    var ids = Object.keys(S.bands);
+    var h = "<h1>Check-in</h1>";
+    h += '<div class="card hi"><div class="tiny">Prenotazione trovata</div>'
+       + '<p class="lead" style="margin:6px 0 10px">' + esc(BOOKING.name) + "</p>"
+       + '<div class="row"><span>' + BOOKING.people + " persone</span><span class=\"num\">"
+       + esc(BOOKING.lane) + " · " + esc(BOOKING.time) + "</span></div></div>";
+
+    if(ids.length === 0){
+      h += '<div class="tapzone"><strong>Avvicina un braccialetto</strong>'
+         + "Il sistema assegna un nome e lo lega alla prenotazione</div>";
+    } else {
+      h += "<h2>Braccialetti consegnati · " + ids.length + " di " + BOOKING.people + "</h2>";
+      ids.forEach(function(id){
+        h += '<div class="pill on">' + esc(S.bands[id].nick) + "</div>";
+      });
+      if(ids.length < BOOKING.people){
+        h += '<div class="tapzone" style="margin-top:14px"><strong>Avvicina il prossimo</strong>'
+           + "Mancano " + (BOOKING.people - ids.length) + " braccialetti</div>";
+      } else {
+        h += '<div class="card ok" style="margin-top:14px"><p style="margin:0;color:#C9F0E4">'
+           + "Gruppo completo. Primo tap al totem, poi direttamente in pista.</p></div>";
+      }
+    }
+    return h;
+  }
+
+  function viewTotem(){
+    var nick = nickOf(S.actor);
+    if(!nick){
+      return "<h1>Totem di benvenuto</h1>"
+        + '<div class="tapzone"><strong>Avvicina il braccialetto</strong>'
+        + "Serve solo a imparare il gesto</div>";
+    }
+    return '<div class="tiny">Benvenuto</div>'
+      + "<h1>Ciao " + esc(nick) + "</h1>"
+      + '<p class="lead">' + esc(BOOKING.lane) + " ti aspetta alle " + esc(BOOKING.time) + ".</p>"
+      + '<div class="card"><p style="margin:0">Lo stesso gesto apre la pista, il tavolo da biliardo, '
+      + "l'armadietto e il conto al bar.</p></div>";
+  }
+
+  function viewLane(){
+    var h = "";
+
+    if(S.closedAt){
+      var tot = laneCost() + ordersTotal();
+      h += '<div class="tiny">Pista 7 · chiusa</div><h1>Partita conclusa</h1>';
+      h += '<div class="card ok"><div class="tiny">Durata</div>'
+         + '<div class="big">' + minutes() + "<span style=\"font-size:22px\"> min</span></div></div>";
+      h += '<div class="card"><div class="row"><span>Pista · ' + minutes() + " min × "
+         + eur(RATE) + '</span><span class="num">' + eur(laneCost()) + "</span></div>";
+      if(S.orders.length){
+        h += '<div class="row"><span>Consumazioni</span><span class="num">' + eur(ordersTotal()) + "</span></div>";
+      }
+      h += '<div class="row"><span style="font-weight:600">Totale</span>'
+         + '<span class="num" style="font-weight:600;font-size:21px">' + eur(tot) + "</span></div></div>";
+      h += '<div class="card hi"><div class="tiny">Risultati</div>'
+         + '<p style="margin:8px 0 0;color:var(--cream)">Inquadra il QR sul monitor di pista '
+         + "per vedere i punteggi. Nessun dato richiesto.</p></div>";
+      h += '<p class="note">Alla cassa il conto si salda intero oppure diviso per nome.</p>';
+      return h;
+    }
+
+    if(!S.openedAt){
+      return '<div class="tiny">Pista 7 · libera</div><h1>Sign-in giocatori</h1>'
+        + '<div class="tapzone"><strong>Avvicina il primo braccialetto</strong>'
+        + "La pista si apre al primo tap e parte il cronometro</div>";
+    }
+
+    // partita in corso
+    if(S.view === "menu"){
+      h += '<div class="tiny">' + esc(nickOf(S.actor)) + "</div><h1>Cosa vuoi fare?</h1>";
+      h += '<button class="act" data-go="order">Ordina<small>Bar e cucina, consegna in pista</small></button>';
+      h += '<button class="act" data-go="addplayer">Aggiungi giocatore<small>Un altro braccialetto entra in partita</small></button>';
+      h += '<button class="act" data-go="bill">Vedi il conto<small>' + eur(laneCost() + ordersTotal()) + " finora</small></button>";
+      h += '<button class="act warn" data-go="close">Chiudi pista<small>Ferma il cronometro</small></button>';
+      h += '<button class="ghost" data-go="back" style="margin-top:6px">Torna al punteggio</button>';
+      return h;
+    }
+
+    if(S.view === "order"){
+      h += '<div class="tiny">Ordine di ' + esc(nickOf(S.actor)) + "</div><h1>Menù</h1>";
+      MENU.forEach(function(m){
+        h += '<button class="act" data-add="' + m.k + '">' + esc(m.n)
+           + '<small>' + eur(m.p) + " · addebitato a " + esc(nickOf(S.actor)) + "</small></button>";
+      });
+      h += '<button class="ghost" data-go="menu" style="margin-top:6px">Indietro</button>';
+      return h;
+    }
+
+    if(S.view === "addplayer"){
+      return '<h1>Aggiungi giocatore</h1>'
+        + '<div class="tapzone"><strong>Avvicina il braccialetto</strong>'
+        + "Entra subito in partita, senza passare dalla cassa</div>"
+        + '<button class="ghost" data-go="menu">Indietro</button>';
+    }
+
+    if(S.view === "bill"){
+      h += "<h1>Conto pista 7</h1>";
+      h += '<div class="card"><div class="row"><span>Pista · ' + minutes() + " min</span>"
+         + '<span class="num">' + eur(laneCost()) + "</span></div>";
+      if(S.orders.length === 0){
+        h += '<div class="row"><span style="color:var(--muted)">Nessuna consumazione</span><span></span></div>';
+      } else {
+        S.orders.forEach(function(o){
+          h += '<div class="row"><span><span class="who">' + esc(o.by) + "</span> · " + esc(o.item)
+             + '</span><span class="num">' + eur(o.price) + "</span></div>";
+        });
+      }
+      h += '<div class="row"><span style="font-weight:600">Totale</span>'
+         + '<span class="num" style="font-weight:600">' + eur(laneCost() + ordersTotal()) + "</span></div></div>";
+      h += '<p class="note">Ogni riga porta il nome di chi ha ordinato. Alla cassa si divide con un tocco.</p>';
+      h += '<button class="ghost" data-go="menu">Indietro</button>';
+      return h;
+    }
+
+    // punteggio / stato partita
+    h += '<div class="tiny">Pista 7 · in corso</div>';
+    h += '<div class="big">' + minutes() + '<span style="font-size:22px"> min</span></div>';
+    h += '<p style="margin-top:4px">' + eur(laneCost() + ordersTotal()) + " finora</p>";
+    h += "<h2>Giocatori</h2>";
+    S.players.forEach(function(id){
+      h += '<div class="pill on">' + esc(nickOf(id)) + "</div>";
+    });
+    h += '<div class="tapzone" style="margin-top:18px"><strong>Avvicina il braccialetto</strong>'
+       + "Un giocatore già in partita apre il menù. Uno nuovo entra in partita.</div>";
+    return h;
+  }
+
+  function viewTable(){
+    return '<div class="tiny">Biliardo 3</div><h1>Lo stesso gesto</h1>'
+      + '<p class="lead">Tap per accendere il tavolo e far partire il cronometro. '
+      + "Tap di nuovo per chiudere.</p>"
+      + '<div class="card"><p style="margin:0">Nessuna tecnologia diversa, nessuna interfaccia nuova: '
+      + "cambia solo cosa c'è dall'altra parte del lettore.</p></div>";
+  }
+
+  function viewExit(){
+    var nick = nickOf(S.actor);
+    if(!nick){
+      return "<h1>Uscita</h1>"
+        + '<div class="tapzone"><strong>Avvicina il braccialetto</strong>'
+        + "Riepilogo della visita e riconsegna</div>";
+    }
+    var mine = S.orders.filter(function(o){ return o.by === nick; });
+    var h = '<div class="tiny">Arrivederci</div><h1>' + esc(nick) + "</h1>";
+    h += '<div class="card"><div class="row"><span>Pista 7</span><span class="num">'
+       + (S.openedAt ? minutes() + " min" : "—") + "</span></div>";
+    h += '<div class="row"><span>Tue consumazioni</span><span class="num">'
+       + (mine.length ? eur(mine.reduce(function(a,o){return a+o.price;},0)) : "—") + "</span></div></div>";
+    h += '<div class="card ok"><p style="margin:0;color:#C9F0E4">Braccialetto riconsegnato e sganciato. '
+       + "Il prossimo ospite riparte pulito.</p></div>";
+    return h;
+  }
+
+  function render(){
+    document.getElementById("stationLabel").textContent = STATIONS[S.station] || "—";
+    var h = "";
+    if(S.flash){
+      h += '<div class="card ok" style="padding:12px 16px"><p style="margin:0;color:#C9F0E4">'
+         + esc(S.flash) + "</p></div>";
+    }
+    if(S.station === "desk")        h += viewDesk();
+    else if(S.station === "totem")  h += viewTotem();
+    else if(S.station === "lane7")  h += viewLane();
+    else if(S.station === "table3") h += viewTable();
+    else if(S.station === "exit")   h += viewExit();
+    document.getElementById("app").innerHTML = h;
+    window.scrollTo(0,0);
+  }
+
+  // ---------- azioni dei pulsanti nelle schermate ----------
+  document.getElementById("app").addEventListener("click", function(ev){
+    var b = ev.target.closest("[data-go],[data-add]");
+    if(!b) return;
+    var go = b.getAttribute("data-go");
+    var add = b.getAttribute("data-add");
+
+    if(add){
+      var m = MENU.filter(function(x){ return x.k === add; })[0];
+      if(m){
+        S.orders.push({ by: nickOf(S.actor), item: m.n, price: m.p });
+        S.view = "bill"; S.flash = "Ordine inviato in cucina";
+      }
+    } else if(go === "close"){
+      S.closedAt = Date.now(); S.view = null; S.flash = null;
+    } else if(go === "back"){
+      S.view = null; S.flash = null;
+    } else {
+      S.view = go; S.flash = null;
+    }
+    save(S); render();
+  });
+
+  // ---------- pannello demo ----------
+  function buildPanel(){
+    var gs = document.getElementById("gridStations");
+    var gb = document.getElementById("gridBands");
+    var tl = document.getElementById("tagList");
+    var base = location.origin + location.pathname;
+    var sh = "", bh = "", th = "";
+
+    Object.keys(STATIONS).forEach(function(k){
+      sh += '<button class="st" data-tapstation="' + k + '">' + esc(STATIONS[k]) + "</button>";
+      th += '<div class="tiny">' + esc(STATIONS[k]) + "</div><code>" + esc(base + "#s=" + k) + "</code>";
+    });
+    BANDS.forEach(function(id, i){
+      bh += '<button data-tapband="' + id + '">' + esc(NICKS[i]) + "</button>";
+      th += '<div class="tiny">Braccialetto ' + (i+1) + " · " + esc(NICKS[i]) + "</div><code>"
+          + esc(base + "#w=" + id) + "</code>";
+    });
+
+    gs.innerHTML = sh; gb.innerHTML = bh; tl.innerHTML = th;
+
+    document.getElementById("panel").addEventListener("click", function(ev){
+      var b = ev.target.closest("[data-tapstation],[data-tapband]");
+      if(!b) return;
+      var s = b.getAttribute("data-tapstation");
+      if(s) tapStation(s); else tapBand(b.getAttribute("data-tapband"));
+    });
+  }
+
+  document.getElementById("btnReset").addEventListener("click", function(){
+    S = blank(); save(S); render();
+  });
+
+  // ---------- lettura NFC continua (Chrome su Android) ----------
+  var nfcBtn = document.getElementById("btnNfc");
+  var nfcNote = document.getElementById("nfcNote");
+  if("NDEFReader" in window){
+    nfcBtn.style.display = "inline-block";
+    nfcNote.textContent = "Lettura NFC continua disponibile: la pagina resta aperta e legge i tag senza ricaricarsi.";
+    nfcBtn.addEventListener("click", function(){
+      var r = new window.NDEFReader();
+      r.scan().then(function(){
+        nfcBtn.style.display = "none";
+        nfcNote.textContent = "Lettore attivo. Avvicina un tag.";
+        r.onreading = function(e){
+          for(var i=0;i<e.message.records.length;i++){
+            var rec = e.message.records[i];
+            if(rec.recordType !== "url") continue;
+            var url = new TextDecoder().decode(rec.data);
+            var idx = url.indexOf("#");
+            if(idx >= 0 && dispatchHash(url.slice(idx))) return;
+          }
+        };
+        r.onreadingerror = function(){ nfcNote.textContent = "Tag non leggibile. Riprova."; };
+      }).catch(function(err){
+        nfcNote.innerHTML = '<span class="err">Lettura NFC non avviata: ' + esc(err.message || err) + "</span>";
+      });
+    });
+  }
+
+  // ---------- avvio ----------
+  buildPanel();
+  var had = dispatchHash(location.hash);
+  if(had && history.replaceState){
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+  if(!had) render();
+
+  window.addEventListener("hashchange", function(){
+    if(dispatchHash(location.hash) && history.replaceState){
+      history.replaceState(null, "", location.pathname + location.search);
+    }
+  });
+
+  // il cronometro avanza a schermo
+  setInterval(function(){
+    if(S.openedAt && !S.closedAt && S.station === "lane7" && !S.view) render();
+  }, 15000);
+
+})();
+</script>
+</body>
+</html>
