@@ -117,6 +117,7 @@
     <div class="grid" id="gridStations"></div>
 
     <h2 style="font-size:15px;margin:18px 0 0">Simula un braccialetto</h2>
+    <p class="note" style="margin:8px 0 0">I braccialetti sono anonimi. Il nickname viene assegnato al check-in, nell'ordine in cui li avvicini, e torna libero alla riconsegna.</p>
     <div class="grid" id="gridBands"></div>
 
     <h2 style="font-size:15px;margin:22px 0 8px">URL da scrivere sui tag</h2>
@@ -137,7 +138,8 @@
     exit:   "Uscita"
   };
   var BANDS = ["g1","g2","g3","g4"];
-  var NICKS = ["Drago Blu","Falco Rosso","Lupo Verde","Orso Giallo"];
+  var NICKS = ["Drago Blu","Falco Rosso","Lupo Verde","Orso Giallo",
+               "Volpe Nera","Gatto Argento","Cervo Bianco","Riccio Viola"];
   var MENU = [
     {k:"birra",  n:"Birra media", p:6},
     {k:"burger", n:"Burger",      p:14},
@@ -185,6 +187,13 @@
     });
   }
   function nickOf(id){ return S.bands[id] ? S.bands[id].nick : null; }
+  function activeBands(){ return Object.keys(S.bands).length; }
+  function freeNick(){
+    var used = {};
+    Object.keys(S.bands).forEach(function(k){ used[S.bands[k].nick] = 1; });
+    for(var i=0;i<NICKS.length;i++){ if(!used[NICKS[i]]) return NICKS[i]; }
+    return "Ospite " + (activeBands() + 1);
+  }
   function minutes(){
     if(!S.openedAt) return 0;
     var end = S.closedAt || Date.now();
@@ -209,8 +218,7 @@
 
     if(S.station === "desk"){
       if(!S.bands[id]){
-        var n = Object.keys(S.bands).length;
-        S.bands[id] = { nick: NICKS[n % NICKS.length], idx: n };
+        S.bands[id] = { nick: freeNick() };
         S.flash = "Braccialetto associato";
       } else {
         S.flash = "Già associato";
@@ -395,19 +403,31 @@
 
   function viewExit(){
     var nick = nickOf(S.actor);
+    var active = activeBands();
+
     if(!nick){
+      if(active === 0){
+        return "<h1>Uscita</h1>"
+          + '<div class="card ok"><p style="margin:0;color:#C9F0E4">Nessun braccialetto attivo. '
+          + "Il sistema è pronto per il prossimo gruppo.</p></div>";
+      }
       return "<h1>Uscita</h1>"
         + '<div class="tapzone"><strong>Avvicina il braccialetto</strong>'
-        + "Riepilogo della visita e riconsegna</div>";
+        + "Riepilogo della visita e riconsegna</div>"
+        + '<p class="note">Ancora da riconsegnare: ' + active + "</p>";
     }
+
     var mine = S.orders.filter(function(o){ return o.by === nick; });
     var h = '<div class="tiny">Arrivederci</div><h1>' + esc(nick) + "</h1>";
     h += '<div class="card"><div class="row"><span>Pista 7</span><span class="num">'
        + (S.openedAt ? minutes() + " min" : "—") + "</span></div>";
-    h += '<div class="row"><span>Tue consumazioni</span><span class="num">'
+    h += '<div class="row"><span>Sue consumazioni</span><span class="num">'
        + (mine.length ? eur(mine.reduce(function(a,o){return a+o.price;},0)) : "—") + "</span></div></div>";
-    h += '<div class="card ok"><p style="margin:0;color:#C9F0E4">Braccialetto riconsegnato e sganciato. '
-       + "Il prossimo ospite riparte pulito.</p></div>";
+    h += '<button class="act warn" data-go="return">Riconsegna e sgancia'
+       + "<small>Il braccialetto torna anonimo e rientra nel cassetto</small></button>";
+    if(active > 1){
+      h += '<p class="note">Altri ' + (active - 1) + " ancora da riconsegnare.</p>";
+    }
     return h;
   }
 
@@ -440,6 +460,19 @@
         S.orders.push({ by: nickOf(S.actor), item: m.n, price: m.p });
         S.view = "bill"; S.flash = "Ordine inviato in cucina";
       }
+    } else if(go === "return"){
+      var gone = S.actor;
+      delete S.bands[gone];
+      S.players = S.players.filter(function(p){ return p !== gone; });
+      S.actor = null; S.view = null;
+      if(activeBands() === 0){
+        var st = S.station;
+        S = blank();
+        S.station = st;
+        S.flash = "Visita conclusa — tutto azzerato, pronto per il prossimo gruppo";
+      } else {
+        S.flash = "Braccialetto sganciato";
+      }
     } else if(go === "close"){
       S.closedAt = Date.now(); S.view = null; S.flash = null;
     } else if(go === "back"){
@@ -463,8 +496,8 @@
       th += '<div class="tiny">' + esc(STATIONS[k]) + "</div><code>" + esc(base + "#s=" + k) + "</code>";
     });
     BANDS.forEach(function(id, i){
-      bh += '<button data-tapband="' + id + '">' + esc(NICKS[i]) + "</button>";
-      th += '<div class="tiny">Braccialetto ' + (i+1) + " · " + esc(NICKS[i]) + "</div><code>"
+      bh += '<button data-tapband="' + id + '">Braccialetto ' + (i+1) + "</button>";
+      th += '<div class="tiny">Braccialetto ' + (i+1) + "</div><code>"
           + esc(base + "#w=" + id) + "</code>";
     });
 
