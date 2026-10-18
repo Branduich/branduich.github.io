@@ -319,11 +319,26 @@
         + '<div class="tapzone"><strong>Avvicina il braccialetto</strong>'
         + "Serve solo a imparare il gesto</div>";
     }
+
+    if(S.view === "rename"){
+      var r = '<div class="tiny">Il tuo nome sui monitor</div><h1>Come ti chiamiamo?</h1>';
+      r += '<div class="card"><input id="nickInput" type="text" maxlength="16" value="' + esc(nick) + '"'
+         + ' style="width:100%;font-family:inherit;font-size:26px;padding:14px;border-radius:10px;'
+         + 'border:1px solid #36486E;background:#16233A;color:#FAF8F3">';
+      r += '<p id="nickErr" class="err" style="display:none"></p></div>';
+      r += '<button class="act" data-go="savenick">Salva'
+         + "<small>Il braccialetto non cambia: cambia solo la riga nel database</small></button>";
+      r += '<button class="ghost" data-go="back">Annulla</button>';
+      return r;
+    }
+
     return '<div class="tiny">Benvenuto</div>'
       + "<h1>Ciao " + esc(nick) + "</h1>"
       + '<p class="lead">' + esc(BOOKING.lane) + " ti aspetta alle " + esc(BOOKING.time) + ".</p>"
       + '<div class="card"><p style="margin:0">Lo stesso gesto apre la pista, il tavolo da biliardo, '
-      + "l'armadietto e il conto al bar.</p></div>";
+      + "l'armadietto e il conto al bar.</p></div>"
+      + '<button class="act" data-go="rename">Cambia nome'
+      + "<small>Quello che vedranno gli altri sui monitor</small></button>";
   }
 
   function viewLane(){
@@ -493,6 +508,11 @@
     return h;
   }
 
+  function nickError(msg){
+    var e = document.getElementById("nickErr");
+    if(e){ e.textContent = msg; e.style.display = "block"; }
+  }
+
   function pills(exceptId){
     return Object.keys(S.bands).filter(function(k){ return k !== exceptId; })
       .map(function(k){ return '<div class="pill on">' + esc(S.bands[k].nick) + "</div>"; })
@@ -546,6 +566,8 @@
     else if(S.station === "table3") h += viewTable();
     else if(S.station === "exit")   h += viewExit();
     document.getElementById("app").innerHTML = h;
+    var ni = document.getElementById("nickInput");
+    if(ni){ ni.focus(); ni.select(); }
     window.scrollTo(0,0);
   }
 
@@ -563,6 +585,18 @@
         S.view = (S.station === "table3") ? "tbill" : "bill";
         S.flash = "Ordine inviato in cucina";
       }
+    } else if(go === "savenick"){
+      var el = document.getElementById("nickInput");
+      var v = el ? el.value.trim().replace(/\s+/g, " ") : "";
+      var taken = Object.keys(S.bands).some(function(k){
+        return k !== S.actor && S.bands[k].nick.toLowerCase() === v.toLowerCase();
+      });
+      if(v.length < 2){ nickError("Scrivi almeno due caratteri."); return; }
+      if(taken){ nickError("Questo nome è già usato da un altro braccialetto."); return; }
+      var old = S.bands[S.actor].nick;
+      S.bands[S.actor].nick = v;
+      S.orders.forEach(function(o){ if(o.by === old) o.by = v; });
+      S.view = null; S.flash = "Nome aggiornato: " + old + " → " + v;
     } else if(go === "return"){
       var gone = S.actor;
       delete S.bands[gone];
