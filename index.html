@@ -691,12 +691,16 @@
     if(e) e.textContent = msg;
   }
 
-  function loadScript(src, cb){
-    var s = document.createElement("script");
-    s.src = src;
-    s.onload = function(){ cb(true); };
-    s.onerror = function(){ cb(false); };
-    document.head.appendChild(s);
+  function loadFirst(urls, cb){
+    var i = 0;
+    (function next(){
+      if(i >= urls.length){ cb(false); return; }
+      var s = document.createElement("script");
+      s.src = urls[i++];
+      s.onload = function(){ cb(true); };
+      s.onerror = next;
+      document.head.appendChild(s);
+    })();
   }
 
   function qrHandle(raw){
@@ -733,9 +737,12 @@
       return;
     }
     qrSay("Carico il lettore…");
-    loadScript("https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js", function(ok){
+    loadFirst([
+      "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js",
+      "https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"
+    ], function(ok){
       if(!ok || typeof window.jsQR !== "function"){
-        qrSay("Lettore QR non disponibile su questo browser.");
+        qrSay("Lettore QR non raggiungibile: controlla la connessione.");
         return;
       }
       var canvas = document.createElement("canvas");
@@ -758,28 +765,36 @@
       qrNote("Fotocamera non disponibile su questo browser.");
       return;
     }
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-      .then(function(stream){
-        qrStream = stream;
-        var video = document.getElementById("qrVideo");
-        video.srcObject = stream;
-        var p = video.play();
-        if(p && p.catch) p.catch(function(){});
-        document.getElementById("scanner").style.display = "block";
-        qrSay("Inquadra un codice");
-        window.scrollTo(0,0);
-        qrDecodeLoop(video);
-      })
-      .catch(function(err){
-        qrNote("Fotocamera negata o non disponibile: " + (err.message || err));
-      });
+    function open(constraints, retry){
+      navigator.mediaDevices.getUserMedia(constraints)
+        .then(function(stream){
+          qrStream = stream;
+          var video = document.getElementById("qrVideo");
+          video.srcObject = stream;
+          var p = video.play();
+          if(p && p.catch) p.catch(function(){});
+          document.getElementById("scanner").style.display = "block";
+          qrSay("Inquadra un codice");
+          window.scrollTo(0,0);
+          qrDecodeLoop(video);
+        })
+        .catch(function(err){
+          // su un portatile la camera posteriore non esiste: riprova senza vincoli
+          if(retry) return open({ video: true }, false);
+          qrNote("Fotocamera negata o non disponibile: " + (err.message || err));
+        });
+    }
+    open({ video: { facingMode: "environment" } }, true);
   }
 
   function qrCodes(){
     var box = document.getElementById("qrCodes");
     if(box.innerHTML){ box.innerHTML = ""; return; }
     box.innerHTML = '<p class="note">Caricamento…</p>';
-    loadScript("https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js", function(ok){
+    loadFirst([
+      "https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js",
+      "https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"
+    ], function(ok){
       if(!ok || typeof window.qrcode !== "function"){
         box.innerHTML = '<p class="err">Generatore non raggiungibile: serve la rete.</p>';
         return;
