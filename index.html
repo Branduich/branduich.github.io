@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Demo braccialetto NFC</title>
+<title>Demo riconoscimento cliente</title>
 <style>
   :root{
     --bg:#16233A; --surface:#1F3050; --surface2:#2A3E63;
@@ -132,8 +132,8 @@
     <h2 style="font-size:15px;margin:22px 0 0">Simula una postazione</h2>
     <div class="grid" id="gridStations"></div>
 
-    <h2 style="font-size:15px;margin:18px 0 0">Simula un braccialetto</h2>
-    <p class="note" style="margin:8px 0 0">I braccialetti sono anonimi. Il nickname viene assegnato al check-in, nell'ordine in cui li avvicini, e torna libero alla riconsegna.</p>
+    <h2 style="font-size:15px;margin:18px 0 0">Simula un cliente</h2>
+    <p class="note" style="margin:8px 0 0">Gli identificativi sono anonimi. Il nome viene assegnato al check-in, nell'ordine in cui li riconosci, e torna libero all'uscita.</p>
     <div class="grid" id="gridBands"></div>
 
     <h2 style="font-size:15px;margin:22px 0 8px">URL da scrivere sui tag</h2>
@@ -178,7 +178,7 @@
       booking:null,    // null = bivio iniziale non ancora scelto
       bands:{},        // g1 -> {nick}
       handed:0,        // quanti ne sono stati consegnati in questa visita
-      players:[],      // id dei braccialetti in pista
+      players:[],      // id dei clienti in pista
       openedAt:null,
       closedAt:null,
       tableOpenAt:null,
@@ -186,7 +186,7 @@
       tableOwner:null,
       orders:[],       // {by, item, price, where}
       view:null,       // null | "menu" | "order" | "bill" | "addplayer"
-      actor:null,      // ultimo braccialetto che ha tappato
+      actor:null,      // ultimo cliente riconosciuto
       flash:null
     };
   }
@@ -290,7 +290,7 @@
       if(!S.bands[id]){
         S.bands[id] = { nick: freeNick() };
         S.handed++;
-        S.flash = "Braccialetto associato";
+        S.flash = "Cliente registrato";
         beep("ok");
       } else {
         S.flash = "Già associato";
@@ -300,8 +300,8 @@
     }
     else if(!S.bands[id]){
       S.flash = (S.station === "exit")
-        ? "Braccialetto già riconsegnato"
-        : "Braccialetto non attivo — passa dal desk";
+        ? "Cliente già uscito"
+        : "Cliente non registrato — passa dal desk";
       beep("err");
       S.view = null;
     }
@@ -384,12 +384,12 @@
        + '</span><span class="num">' + esc(B.lane) + " · " + esc(B.time) + "</span></div></div>";
 
     if(ids.length === 0){
-      h += '<div class="tapzone"><strong>Avvicina un braccialetto</strong>'
-         + "Il sistema assegna un nome e lo lega alla prenotazione</div>";
+      h += '<div class="tapzone"><strong>Riconosci un cliente</strong>'
+         + "Tap o scansione: il sistema gli assegna un nome</div>";
       return h;
     }
 
-    h += "<h2>Braccialetti consegnati · " + ids.length
+    h += "<h2>Clienti registrati · " + ids.length
        + (B.people ? " di " + B.people : "") + "</h2>";
     ids.forEach(function(id){
       h += '<div class="pill on">' + esc(S.bands[id].nick) + "</div>";
@@ -399,9 +399,9 @@
       h += '<div class="card ok" style="margin-top:14px"><p style="margin:0;color:#C9F0E4">'
          + "Gruppo completo. Primo tap al totem, poi direttamente in pista.</p></div>";
     } else {
-      h += '<div class="tapzone" style="margin-top:14px"><strong>Avvicina il prossimo</strong>'
+      h += '<div class="tapzone" style="margin-top:14px"><strong>Riconosci il prossimo</strong>'
          + (B.people
-             ? "Mancano " + (B.people - ids.length) + " braccialetti"
+             ? "Ne mancano " + (B.people - ids.length)
              : "Quanti ne servono, senza un numero fissato") + "</div>";
     }
     return h;
@@ -411,7 +411,7 @@
     var nick = nickOf(S.actor);
     if(!nick){
       return "<h1>Totem di benvenuto</h1>"
-        + '<div class="tapzone"><strong>Avvicina il braccialetto</strong>'
+        + '<div class="tapzone"><strong>Riconosci il cliente</strong>'
         + "Serve solo a imparare il gesto</div>";
     }
 
@@ -422,7 +422,7 @@
          + 'border:1px solid #36486E;background:#16233A;color:#FAF8F3">';
       r += '<p id="nickErr" class="err" style="display:none"></p></div>';
       r += '<button class="act" data-go="savenick">Salva'
-         + "<small>Il braccialetto non cambia: cambia solo la riga nel database</small></button>";
+         + "<small>L'identificativo non cambia: cambia solo la riga nel database</small></button>";
       r += '<button class="ghost" data-go="back">Annulla</button>';
       return r;
     }
@@ -462,7 +462,7 @@
 
     if(!S.openedAt){
       return '<div class="tiny">Pista 7 · libera</div><h1>Sign-in giocatori</h1>'
-        + '<div class="tapzone"><strong>Avvicina il primo braccialetto</strong>'
+        + '<div class="tapzone"><strong>Riconosci il primo cliente</strong>'
         + "La pista si apre al primo tap e parte il cronometro</div>";
     }
 
@@ -470,7 +470,7 @@
     if(S.view === "menu"){
       h += '<div class="tiny">' + esc(nickOf(S.actor)) + "</div><h1>Cosa vuoi fare?</h1>";
       h += '<button class="act" data-go="order">Ordina<small>Bar e cucina, consegna in pista</small></button>';
-      h += '<button class="act" data-go="addplayer">Aggiungi giocatore<small>Un altro braccialetto entra in partita</small></button>';
+      h += '<button class="act" data-go="addplayer">Aggiungi giocatore<small>Un altro cliente entra in partita</small></button>';
       h += '<button class="act" data-go="bill">Vedi il conto<small>' + eur(laneCost() + ordersTotalAt("lane7")) + " finora</small></button>";
       h += '<button class="act warn" data-go="close">Chiudi pista<small>Ferma il cronometro</small></button>';
       h += '<button class="ghost" data-go="back" style="margin-top:6px">Torna al punteggio</button>';
@@ -489,7 +489,7 @@
 
     if(S.view === "addplayer"){
       return '<h1>Aggiungi giocatore</h1>'
-        + '<div class="tapzone"><strong>Avvicina il braccialetto</strong>'
+        + '<div class="tapzone"><strong>Riconosci il cliente</strong>'
         + "Entra subito in partita, senza passare dalla cassa</div>"
         + '<button class="ghost" data-go="menu">Indietro</button>';
     }
@@ -521,7 +521,7 @@
     S.players.forEach(function(id){
       h += '<div class="pill on">' + esc(nickOf(id)) + "</div>";
     });
-    h += '<div class="tapzone" style="margin-top:18px"><strong>Avvicina il braccialetto</strong>'
+    h += '<div class="tapzone" style="margin-top:18px"><strong>Riconosci il cliente</strong>'
        + "Un giocatore già in partita apre il menù. Uno nuovo entra in partita.</div>";
     return h;
   }
@@ -542,14 +542,14 @@
       }
       h += '<div class="row"><span style="font-weight:600">Totale</span>'
          + '<span class="num" style="font-weight:600;font-size:21px">' + eur(tot) + "</span></div></div>";
-      h += '<div class="tapzone"><strong>Avvicina un braccialetto</strong>'
+      h += '<div class="tapzone"><strong>Riconosci un cliente</strong>'
          + "Per aprire una nuova sessione</div>";
       return h;
     }
 
     if(!S.tableOpenAt){
       return '<div class="tiny">Biliardo 3 · libero</div><h1>Lo stesso gesto</h1>'
-        + '<div class="tapzone"><strong>Avvicina il braccialetto</strong>'
+        + '<div class="tapzone"><strong>Riconosci il cliente</strong>'
         + "Il tavolo si accende e parte il cronometro</div>"
         + '<div class="card"><p style="margin:0">Nessuna tecnologia diversa, nessuna interfaccia nuova: '
         + "cambia solo cosa c'è dall'altra parte del lettore.</p></div>";
@@ -598,8 +598,8 @@
     h += '<div class="big">' + tableMinutes() + '<span style="font-size:22px"> min</span></div>';
     h += '<p style="margin-top:4px">' + eur(tableCost() + ordersTotalAt("table3")) + " finora</p>";
     h += "<h2>Aperto da</h2>";
-    h += '<div class="pill on">' + esc(nickOf(S.tableOwner) || "braccialetto riconsegnato") + "</div>";
-    h += '<div class="tapzone" style="margin-top:18px"><strong>Avvicina il braccialetto</strong>'
+    h += '<div class="pill on">' + esc(nickOf(S.tableOwner) || "cliente uscito") + "</div>";
+    h += '<div class="tapzone" style="margin-top:18px"><strong>Riconosci il cliente</strong>'
        + "Ordina, controlla il conto o chiudi il tavolo</div>";
     return h;
   }
@@ -629,19 +629,19 @@
     if(!nick){
       if(active === 0){
         return "<h1>Uscita</h1>"
-          + '<div class="card ok"><p style="margin:0;color:#C9F0E4">Nessun braccialetto attivo. '
+          + '<div class="card ok"><p style="margin:0;color:#C9F0E4">Nessun cliente attivo. '
           + "Il sistema è pronto per il prossimo gruppo.</p></div>";
       }
       return "<h1>Uscita</h1>"
-        + '<div class="card"><div class="tiny">Riconsegnati</div>'
+        + '<div class="card"><div class="tiny">Usciti</div>'
         + '<div class="big">' + done + '<span style="font-size:26px"> di ' + S.handed + "</span></div></div>"
-        + '<div class="tapzone"><strong>Avvicina il braccialetto</strong>'
-        + "Riepilogo della visita e riconsegna</div>"
-        + "<h2>Ancora al polso · " + active + "</h2>" + pills(null);
+        + '<div class="tapzone"><strong>Riconosci il cliente</strong>'
+        + "Riepilogo della visita e uscita</div>"
+        + "<h2>Ancora nel locale · " + active + "</h2>" + pills(null);
     }
 
     var mine = S.orders.filter(function(o){ return o.by === nick; });
-    var h = '<div class="tiny">Riconsegnati ' + done + " di " + S.handed + "</div>";
+    var h = '<div class="tiny">Usciti ' + done + " di " + S.handed + "</div>";
     h += "<h1>" + esc(nick) + "</h1>";
     h += '<div class="card"><div class="row"><span>Pista 7</span><span class="num">'
        + (S.openedAt ? minutes() + " min" : "—") + "</span></div>";
@@ -651,8 +651,8 @@
     }
     h += '<div class="row"><span>Sue consumazioni</span><span class="num">'
        + (mine.length ? eur(mine.reduce(function(a,o){return a+o.price;},0)) : "—") + "</span></div></div>";
-    h += '<button class="act warn" data-go="return">Riconsegna e sgancia'
-       + "<small>Il braccialetto torna anonimo e rientra nel cassetto</small></button>";
+    h += '<button class="act warn" data-go="return">Registra l&rsquo;uscita'
+       + "<small>L'identificativo torna anonimo e libero per il prossimo</small></button>";
     if(active > 1){
       h += "<h2>Dopo questo ne restano " + (active - 1) + "</h2>" + pills(S.actor);
     }
@@ -717,7 +717,7 @@
         return k !== S.actor && S.bands[k].nick.toLowerCase() === v.toLowerCase();
       });
       if(v.length < 2){ nickError("Scrivi almeno due caratteri."); beep("err"); return; }
-      if(taken){ nickError("Questo nome è già usato da un altro braccialetto."); beep("err"); return; }
+      if(taken){ nickError("Questo nome è già usato da un altro cliente."); beep("err"); return; }
       var old = S.bands[S.actor].nick;
       S.bands[S.actor].nick = v;
       S.orders.forEach(function(o){ if(o.by === old) o.by = v; });
@@ -735,7 +735,7 @@
         S.flash = "Visita conclusa — tutto azzerato, pronto per il prossimo gruppo";
         beep("done");
       } else {
-        S.flash = "Braccialetto sganciato";
+        S.flash = "Uscita registrata";
         beep("ok");
       }
     } else if(go === "close"){
@@ -763,8 +763,8 @@
       th += '<div class="tiny">' + esc(STATIONS[k]) + "</div><code>" + esc(base + "#s=" + k) + "</code>";
     });
     BANDS.forEach(function(id, i){
-      bh += '<button data-tapband="' + id + '">Braccialetto ' + (i+1) + "</button>";
-      th += '<div class="tiny">Braccialetto ' + (i+1) + "</div><code>"
+      bh += '<button data-tapband="' + id + '">Cliente ' + (i+1) + "</button>";
+      th += '<div class="tiny">Cliente ' + (i+1) + "</div><code>"
           + esc(base + "#w=" + id) + "</code>";
     });
 
@@ -904,7 +904,7 @@
       }
       var base = location.origin + location.pathname;
       var items = BANDS.map(function(id, i){
-        return { l: "Braccialetto " + (i+1), u: base + "#w=" + id };
+        return { l: "Cliente " + (i+1), u: base + "#w=" + id };
       }).concat(Object.keys(STATIONS).map(function(k){
         return { l: STATIONS[k], u: base + "#s=" + k };
       }));
