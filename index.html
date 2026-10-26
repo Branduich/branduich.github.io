@@ -477,9 +477,12 @@
       }
       h += '<div class="row"><span style="font-weight:600">Totale</span>'
          + '<span class="num" style="font-weight:600;font-size:21px">' + eur(tot) + "</span></div></div>";
-      h += '<div class="card hi"><div class="tiny">Risultati</div>'
-         + '<p style="margin:8px 0 0;color:var(--cream)">Inquadra il QR sul monitor di pista '
-         + "per vedere i punteggi. Nessun dato richiesto.</p></div>";
+      // proposta contestuale, solo se il tavolo è davvero libero
+      if(!S.tableOpenAt || S.tableClosedAt){
+        h += '<div class="card hi"><div class="tiny">Extend your play</div>'
+           + '<p style="margin:8px 0 0;color:var(--cream)">C\'è il biliardo 3 libero. '
+           + "Se prenoti ora avrai il 10% di sconto.</p></div>";
+      }
       h += '<p class="note">Alla cassa il conto si salda intero oppure diviso per nome.</p>';
       return h;
     }
