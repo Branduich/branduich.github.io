@@ -158,7 +158,8 @@
   function blank(){
     return {
       station:"desk",
-      bands:{},        // g1 -> {nick, idx}
+      bands:{},        // g1 -> {nick}
+      handed:0,        // quanti ne sono stati consegnati in questa visita
       players:[],      // id dei braccialetti in pista
       openedAt:null,
       closedAt:null,
@@ -232,6 +233,7 @@
     if(S.station === "desk"){
       if(!S.bands[id]){
         S.bands[id] = { nick: freeNick() };
+        S.handed++;
         S.flash = "Braccialetto associato";
       } else {
         S.flash = "Già associato";
@@ -239,7 +241,9 @@
       S.view = null;
     }
     else if(!S.bands[id]){
-      S.flash = "Braccialetto non attivo — passa dal desk";
+      S.flash = (S.station === "exit")
+        ? "Braccialetto già riconsegnato"
+        : "Braccialetto non attivo — passa dal desk";
       S.view = null;
     }
     else if(S.station === "totem"){
@@ -523,6 +527,8 @@
     var nick = nickOf(S.actor);
     var active = activeBands();
 
+    var done = Math.max(0, S.handed - active);
+
     if(!nick){
       if(active === 0){
         return "<h1>Uscita</h1>"
@@ -530,13 +536,16 @@
           + "Il sistema è pronto per il prossimo gruppo.</p></div>";
       }
       return "<h1>Uscita</h1>"
+        + '<div class="card"><div class="tiny">Riconsegnati</div>'
+        + '<div class="big">' + done + '<span style="font-size:26px"> di ' + S.handed + "</span></div></div>"
         + '<div class="tapzone"><strong>Avvicina il braccialetto</strong>'
         + "Riepilogo della visita e riconsegna</div>"
-        + "<h2>Da riconsegnare · " + active + "</h2>" + pills(null);
+        + "<h2>Ancora al polso · " + active + "</h2>" + pills(null);
     }
 
     var mine = S.orders.filter(function(o){ return o.by === nick; });
-    var h = '<div class="tiny">Arrivederci</div><h1>' + esc(nick) + "</h1>";
+    var h = '<div class="tiny">Riconsegnati ' + done + " di " + S.handed + "</div>";
+    h += "<h1>" + esc(nick) + "</h1>";
     h += '<div class="card"><div class="row"><span>Pista 7</span><span class="num">'
        + (S.openedAt ? minutes() + " min" : "—") + "</span></div>";
     if(S.tableOpenAt){
@@ -548,7 +557,7 @@
     h += '<button class="act warn" data-go="return">Riconsegna e sgancia'
        + "<small>Il braccialetto torna anonimo e rientra nel cassetto</small></button>";
     if(active > 1){
-      h += "<h2>Ancora da riconsegnare · " + (active - 1) + "</h2>" + pills(S.actor);
+      h += "<h2>Dopo questo ne restano " + (active - 1) + "</h2>" + pills(S.actor);
     }
     return h;
   }
