@@ -165,7 +165,8 @@
   var RATE = 0.60;       // euro al minuto di pista
   var RATE_TABLE = 0.25; // euro al minuto di biliardo
 
-  var BOOKING = { name:"Mind Squeezers", people:4, lane:"Pista 7", time:"19:00" };
+  // la prenotazione già a sistema, usata dal ramo "ho prenotato"
+  var BOOKING = { name:"Mind Squeezers", people:4, lane:"Pista 7", time:"19:00", walkin:false };
 
   // ---------- stato ----------
   var mem = null;
@@ -174,6 +175,7 @@
   function blank(){
     return {
       station:"desk",
+      booking:null,    // null = bivio iniziale non ancora scelto
       bands:{},        // g1 -> {nick}
       handed:0,        // quanti ne sono stati consegnati in questa visita
       players:[],      // id dei braccialetti in pista
@@ -278,6 +280,13 @@
     S.actor = id; S.flash = null;
 
     if(S.station === "desk"){
+      if(!S.booking){
+        S.flash = "Prima indica se c'è una prenotazione";
+        beep("err");
+        S.view = null;
+        save(S); render();
+        return;
+      }
       if(!S.bands[id]){
         S.bands[id] = { nick: freeNick() };
         S.handed++;
@@ -344,28 +353,56 @@
 
   // ---------- schermate ----------
   function viewDesk(){
+    // bivio iniziale: prenotazione esistente oppure creata al volo
+    if(!S.booking){
+      if(S.view === "newbooking"){
+        var r = '<div class="tiny">Senza prenotazione</div><h1>Chi siete?</h1>';
+        r += '<div class="card"><input id="bookInput" type="text" maxlength="24" placeholder="Nome del gruppo"'
+           + ' style="width:100%;font-family:inherit;font-size:26px;padding:14px;border-radius:10px;'
+           + 'border:1px solid #36486E;background:#16233A;color:#FAF8F3">';
+        r += '<p id="bookErr" class="err" style="display:none"></p></div>';
+        r += '<button class="act" data-go="savebooking">Crea la prenotazione'
+           + "<small>Pista assegnata subito, poi il percorso è identico</small></button>";
+        r += '<button class="ghost" data-go="backbooking">Indietro</button>';
+        return r;
+      }
+      return '<div class="tiny">Desk accoglienza</div><h1>Avete prenotato?</h1>'
+        + '<button class="act" data-go="hasbooking">Sì, abbiamo una prenotazione'
+        + "<small>Il sistema la trova e carica i diritti</small></button>"
+        + '<button class="act" data-go="nobooking">No, siamo arrivati adesso'
+        + "<small>Si crea al momento, serve solo un nome</small></button>";
+    }
+
+    var B = S.booking;
     var ids = Object.keys(S.bands);
     var h = "<h1>Check-in</h1>";
-    h += '<div class="card hi"><div class="tiny">Prenotazione trovata</div>'
-       + '<p class="lead" style="margin:6px 0 10px">' + esc(BOOKING.name) + "</p>"
-       + '<div class="row"><span>' + BOOKING.people + " persone</span><span class=\"num\">"
-       + esc(BOOKING.lane) + " · " + esc(BOOKING.time) + "</span></div></div>";
+    h += '<div class="card hi"><div class="tiny">'
+       + (B.walkin ? "Creata ora al desk" : "Prenotazione trovata") + "</div>"
+       + '<p class="lead" style="margin:6px 0 10px">' + esc(B.name) + "</p>"
+       + '<div class="row"><span>'
+       + (B.people ? B.people + " persone" : "Gruppo aperto")
+       + '</span><span class="num">' + esc(B.lane) + " · " + esc(B.time) + "</span></div></div>";
 
     if(ids.length === 0){
       h += '<div class="tapzone"><strong>Avvicina un braccialetto</strong>'
          + "Il sistema assegna un nome e lo lega alla prenotazione</div>";
+      return h;
+    }
+
+    h += "<h2>Braccialetti consegnati · " + ids.length
+       + (B.people ? " di " + B.people : "") + "</h2>";
+    ids.forEach(function(id){
+      h += '<div class="pill on">' + esc(S.bands[id].nick) + "</div>";
+    });
+
+    if(B.people && ids.length >= B.people){
+      h += '<div class="card ok" style="margin-top:14px"><p style="margin:0;color:#C9F0E4">'
+         + "Gruppo completo. Primo tap al totem, poi direttamente in pista.</p></div>";
     } else {
-      h += "<h2>Braccialetti consegnati · " + ids.length + " di " + BOOKING.people + "</h2>";
-      ids.forEach(function(id){
-        h += '<div class="pill on">' + esc(S.bands[id].nick) + "</div>";
-      });
-      if(ids.length < BOOKING.people){
-        h += '<div class="tapzone" style="margin-top:14px"><strong>Avvicina il prossimo</strong>'
-           + "Mancano " + (BOOKING.people - ids.length) + " braccialetti</div>";
-      } else {
-        h += '<div class="card ok" style="margin-top:14px"><p style="margin:0;color:#C9F0E4">'
-           + "Gruppo completo. Primo tap al totem, poi direttamente in pista.</p></div>";
-      }
+      h += '<div class="tapzone" style="margin-top:14px"><strong>Avvicina il prossimo</strong>'
+         + (B.people
+             ? "Mancano " + (B.people - ids.length) + " braccialetti"
+             : "Quanti ne servono, senza un numero fissato") + "</div>";
     }
     return h;
   }
@@ -392,7 +429,8 @@
 
     return '<div class="tiny">Benvenuto</div>'
       + "<h1>Ciao " + esc(nick) + "</h1>"
-      + '<p class="lead">' + esc(BOOKING.lane) + " ti aspetta alle " + esc(BOOKING.time) + ".</p>"
+      + '<p class="lead">' + esc(S.booking ? S.booking.lane : "La pista")
+      + " ti aspetta alle " + esc(S.booking ? S.booking.time : "—") + ".</p>"
       + '<div class="card"><p style="margin:0">Lo stesso gesto apre la pista, il tavolo da biliardo, '
       + "l'armadietto e il conto al bar.</p></div>"
       + '<button class="act" data-go="rename">Cambia nome'
@@ -571,6 +609,11 @@
     if(e){ e.textContent = msg; e.style.display = "block"; }
   }
 
+  function bookError(msg){
+    var e = document.getElementById("bookErr");
+    if(e){ e.textContent = msg; e.style.display = "block"; }
+  }
+
   function pills(exceptId){
     return Object.keys(S.bands).filter(function(k){ return k !== exceptId; })
       .map(function(k){ return '<div class="pill on">' + esc(S.bands[k].nick) + "</div>"; })
@@ -629,8 +672,8 @@
     else if(S.station === "table3") h += viewTable();
     else if(S.station === "exit")   h += viewExit();
     document.getElementById("app").innerHTML = h;
-    var ni = document.getElementById("nickInput");
-    if(ni){ ni.focus(); ni.select(); }
+    var ni = document.getElementById("nickInput") || document.getElementById("bookInput");
+    if(ni){ ni.focus(); if(ni.select) ni.select(); }
     window.scrollTo(0,0);
   }
 
@@ -649,6 +692,24 @@
         S.flash = "Ordine inviato in cucina";
         beep("ok");
       }
+    } else if(go === "hasbooking"){
+      S.booking = {
+        name: BOOKING.name, people: BOOKING.people,
+        lane: BOOKING.lane, time: BOOKING.time, walkin: false
+      };
+      S.view = null; S.flash = "Prenotazione trovata"; beep("ok");
+    } else if(go === "nobooking"){
+      S.view = "newbooking"; S.flash = null;
+    } else if(go === "backbooking"){
+      S.view = null; S.flash = null;
+    } else if(go === "savebooking"){
+      var be = document.getElementById("bookInput");
+      var bv = be ? be.value.trim().replace(/\s+/g, " ") : "";
+      if(bv.length < 2){ bookError("Scrivi almeno due caratteri."); beep("err"); return; }
+      var d = new Date();
+      var hh = ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+      S.booking = { name: bv, people: null, lane: "Pista 7", time: hh, walkin: true };
+      S.view = null; S.flash = "Prenotazione creata al volo"; beep("ok");
     } else if(go === "savenick"){
       var el = document.getElementById("nickInput");
       var v = el ? el.value.trim().replace(/\s+/g, " ") : "";
