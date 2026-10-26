@@ -56,7 +56,7 @@
     padding:5px 13px; font-size:14px; margin:0 6px 6px 0;
   }
   .pill.on{background:var(--teal-dim); color:#C9F0E4}
-  button.act{
+    button.act{
     display:block; width:100%; text-align:left; font-family:inherit;
     background:var(--surface); color:var(--cream);
     border:1px solid var(--line); border-radius:14px;
@@ -148,7 +148,7 @@
 
   var STATIONS = {
     desk:   "Desk accoglienza",
-    totem:  "Totem di benvenuto",
+    totem:  "Kiosk di benvenuto",
     lane7:  "Pista 7",
     table3: "Biliardo 3",
     exit:   "Uscita"
@@ -345,7 +345,11 @@
     if(!h) return false;
     h = h.replace(/^#/, "");
     var m = /^s=([a-z0-9]+)$/i.exec(h);
-    if(m){ tapStation(m[1]); return true; }
+    if(m){
+      // "kiosk" accettato come sinonimo, così i tag già scritti come "totem" restano validi
+      tapStation(m[1].toLowerCase() === "kiosk" ? "totem" : m[1]);
+      return true;
+    }
     m = /^w=([a-z0-9]+)$/i.exec(h);
     if(m){ tapBand(m[1]); return true; }
     return false;
@@ -397,7 +401,7 @@
 
     if(B.people && ids.length >= B.people){
       h += '<div class="card ok" style="margin-top:14px"><p style="margin:0;color:#C9F0E4">'
-         + "Gruppo completo. Primo tap al totem, poi direttamente in pista.</p></div>";
+         + "Gruppo completo. Primo tap al kiosk, poi direttamente in pista.</p></div>";
     } else {
       h += '<div class="tapzone" style="margin-top:14px"><strong>Riconosci il prossimo</strong>'
          + (B.people
@@ -407,12 +411,27 @@
     return h;
   }
 
-  function viewTotem(){
+  function viewKiosk(){
     var nick = nickOf(S.actor);
     if(!nick){
-      return "<h1>Totem di benvenuto</h1>"
+      return "<h1>Kiosk di benvenuto</h1>"
         + '<div class="tapzone"><strong>Riconosci il cliente</strong>'
         + "Serve solo a imparare il gesto</div>";
+    }
+    var C = S.bands[S.actor];
+
+    if(S.view === "email"){
+      var m = '<div class="tiny">Contatto di ' + esc(nick) + "</div>"
+            + "<h1>Dove mandiamo i risultati?</h1>";
+      m += '<div class="card"><input id="mailInput" type="email" inputmode="email" maxlength="60"'
+         + ' placeholder="nome@esempio.it" value="' + esc(C.email || "") + '"'
+         + ' style="width:100%;font-family:inherit;font-size:24px;padding:14px;border-radius:10px;'
+         + 'border:1px solid #36486E;background:#16233A;color:#FAF8F3">';
+      m += '<p id="mailErr" class="err" style="display:none"></p></div>';
+      m += '<button class="act" data-go="savemail">Salva'
+         + "<small>Resta nel sistema, mai sull'identificativo</small></button>";
+      m += '<button class="ghost" data-go="back">Annulla</button>';
+      return m;
     }
 
     if(S.view === "rename"){
@@ -434,7 +453,12 @@
       + '<div class="card"><p style="margin:0">Lo stesso gesto apre la pista, il tavolo da biliardo, '
       + "l'armadietto e il conto al bar.</p></div>"
       + '<button class="act" data-go="rename">Cambia nome'
-      + "<small>Quello che vedranno gli altri sui monitor</small></button>";
+      + "<small>Quello che vedranno gli altri sui monitor</small></button>"
+      + '<button class="act" data-go="email">'
+      + (C.email ? "Cambia email" : "Aggiungi email")
+      + "<small>"
+      + (C.email ? esc(maskEmail(C.email)) : "Per ricevere i risultati di fine partita")
+      + "</small></button>";
   }
 
   function viewLane(){
@@ -614,6 +638,17 @@
     if(e){ e.textContent = msg; e.style.display = "block"; }
   }
 
+  function mailError(msg){
+    var e = document.getElementById("mailErr");
+    if(e){ e.textContent = msg; e.style.display = "block"; }
+  }
+
+  function maskEmail(m){
+    var i = m.indexOf("@");
+    if(i < 1) return m;
+    return m.slice(0, 1) + "•••" + m.slice(i);
+  }
+
   function pills(exceptId){
     return Object.keys(S.bands).filter(function(k){ return k !== exceptId; })
       .map(function(k){ return '<div class="pill on">' + esc(S.bands[k].nick) + "</div>"; })
@@ -650,7 +685,9 @@
          + tableMinutes() + " min</span></div>";
     }
     h += '<div class="row"><span>Sue consumazioni</span><span class="num">'
-       + (mine.length ? eur(mine.reduce(function(a,o){return a+o.price;},0)) : "—") + "</span></div></div>";
+       + (mine.length ? eur(mine.reduce(function(a,o){return a+o.price;},0)) : "—") + "</span></div>";
+    h += '<div class="row"><span>Risultati</span><span class="num">'
+       + (S.bands[S.actor].email ? esc(maskEmail(S.bands[S.actor].email)) : "solo QR") + "</span></div></div>";
     h += '<button class="act warn" data-go="return">Registra l&rsquo;uscita'
        + "<small>L'identificativo torna anonimo e libero per il prossimo</small></button>";
     if(active > 1){
@@ -667,12 +704,14 @@
          + esc(S.flash) + "</p></div>";
     }
     if(S.station === "desk")        h += viewDesk();
-    else if(S.station === "totem")  h += viewTotem();
+    else if(S.station === "totem")  h += viewKiosk();
     else if(S.station === "lane7")  h += viewLane();
     else if(S.station === "table3") h += viewTable();
     else if(S.station === "exit")   h += viewExit();
     document.getElementById("app").innerHTML = h;
-    var ni = document.getElementById("nickInput") || document.getElementById("bookInput");
+    var ni = document.getElementById("nickInput")
+          || document.getElementById("bookInput")
+          || document.getElementById("mailInput");
     if(ni){ ni.focus(); if(ni.select) ni.select(); }
     window.scrollTo(0,0);
   }
@@ -710,6 +749,16 @@
       var hh = ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
       S.booking = { name: bv, people: null, lane: "Pista 7", time: hh, walkin: true };
       S.view = null; S.flash = "Prenotazione creata al volo"; beep("ok");
+    } else if(go === "email"){
+      S.view = "email"; S.flash = null;
+    } else if(go === "savemail"){
+      var me = document.getElementById("mailInput");
+      var mv = me ? me.value.trim() : "";
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(mv)){
+        mailError("Indirizzo non valido."); beep("err"); return;
+      }
+      S.bands[S.actor].email = mv;
+      S.view = null; S.flash = "Contatto salvato: " + maskEmail(mv); beep("ok");
     } else if(go === "savenick"){
       var el = document.getElementById("nickInput");
       var v = el ? el.value.trim().replace(/\s+/g, " ") : "";
