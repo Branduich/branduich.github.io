@@ -168,8 +168,10 @@
     {k:"nachos", n:"Nachos",      p:11},
     {k:"caraffa",n:"Caraffa 1L",  p:18}
   ];
-  var RATE = 0.60;       // euro al minuto di pista
-  var RATE_TABLE = 0.25; // euro al minuto di biliardo
+  var LANE_HOUR  = 30;   // euro per ora di pista, prepagata
+  var LANE_BLOCK = 60;   // minuti di ogni blocco prepagato
+  var TABLE_PRICE = 15;  // euro per blocco di biliardo, prepagato
+  var TABLE_BLOCK = 30;  // minuti di ogni blocco prepagato
 
   // la prenotazione già a sistema, usata dal ramo "ho prenotato"
   var BOOKING = { name:"Mind Squeezers", people:4, lane:"Pista 7", time:"19:00", walkin:false };
@@ -189,7 +191,7 @@
       closedAt:null,
       tableOpenAt:null,
       tableClosedAt:null,
-      tableOwner:null,
+      tablePlayers:[],  // chi è iscritto al tavolo
       orders:[],       // {by, item, price, where}
       view:null,       // null | "menu" | "order" | "bill" | "addplayer"
       actor:null,      // ultimo cliente riconosciuto
@@ -259,13 +261,22 @@
     var end = S.closedAt || Date.now();
     return Math.max(1, Math.round((end - S.openedAt)/60000));
   }
-  function laneCost(){ return minutes() * RATE; }
+  function laneBlocks(){ return Math.max(1, Math.ceil(minutes() / LANE_BLOCK)); }
+  function laneCost(){ return laneBlocks() * LANE_HOUR; }
+  function laneLeft(){ return Math.max(0, laneBlocks() * LANE_BLOCK - minutes()); }
+  function lanePeople(){ return S.players.length || 1; }
+  function laneShare(){ return laneCost() / lanePeople(); }
   function tableMinutes(){
     if(!S.tableOpenAt) return 0;
     var end = S.tableClosedAt || Date.now();
     return Math.max(1, Math.round((end - S.tableOpenAt)/60000));
   }
-  function tableCost(){ return tableMinutes() * RATE_TABLE; }
+  function tableBlocks(){ return Math.max(1, Math.ceil(tableMinutes() / TABLE_BLOCK)); }
+  function tableCost(){ return tableBlocks() * TABLE_PRICE; }
+  function tableLeft(){ return Math.max(0, tableBlocks() * TABLE_BLOCK - tableMinutes()); }
+  function tableSpan(){ return tableBlocks() * TABLE_BLOCK; }
+  function tablePeople(){ return S.tablePlayers.length || 1; }
+  function tableShare(){ return tableCost() / tablePeople(); }
   function ordersAt(where){
     return S.orders.filter(function(o){ return (o.where || "lane7") === where; });
   }
@@ -332,8 +343,13 @@
       if(!S.tableOpenAt || S.tableClosedAt){
         S.tableOpenAt = Date.now();
         S.tableClosedAt = null;
-        S.tableOwner = id;
+        S.tablePlayers = [id];
         S.flash = "Tavolo acceso";
+        beep("ok");
+        S.view = null;
+      } else if(S.tablePlayers.indexOf(id) < 0){
+        S.tablePlayers.push(id);
+        S.flash = "Giocatore aggiunto al tavolo";
         beep("ok");
         S.view = null;
       } else {
@@ -473,10 +489,14 @@
     if(S.closedAt){
       var tot = laneCost() + ordersTotalAt("lane7");
       h += '<div class="tiny">Pista 7 · chiusa</div><h1>Partita conclusa</h1>';
-      h += '<div class="card ok"><div class="tiny">Durata</div>'
+      h += '<div class="card ok"><div class="tiny">Giocato</div>'
          + '<div class="big">' + minutes() + "<span style=\"font-size:22px\"> min</span></div></div>";
-      h += '<div class="card"><div class="row"><span>Pista · ' + minutes() + " min × "
-         + eur(RATE) + '</span><span class="num">' + eur(laneCost()) + "</span></div>";
+      h += '<div class="card"><div class="row"><span>Pista · '
+         + laneBlocks() + (laneBlocks() === 1 ? " ora prepagata" : " ore prepagate")
+         + '</span><span class="num">' + eur(laneCost()) + "</span></div>";
+      h += '<div class="row"><span>Divisa per ' + lanePeople()
+         + (lanePeople() === 1 ? " persona" : " persone") + '</span><span class="num">'
+         + eur(laneShare()) + " a testa</span></div>";
       if(ordersAt("lane7").length){
         h += '<div class="row"><span>Consumazioni</span><span class="num">'
            + eur(ordersTotalAt("lane7")) + "</span></div>";
@@ -496,7 +516,7 @@
     if(!S.openedAt){
       return '<div class="tiny">Pista 7 · libera</div><h1>Sign-in giocatori</h1>'
         + '<div class="tapzone"><strong>Riconosci il primo cliente</strong>'
-        + "La pista si apre al primo tap e parte il cronometro</div>";
+        + "Si apre con un'ora prepagata a " + eur(LANE_HOUR) + "</div>";
     }
 
     // partita in corso
@@ -504,8 +524,8 @@
       h += '<div class="tiny">' + esc(nickOf(S.actor)) + "</div><h1>Cosa vuoi fare?</h1>";
       h += '<button class="act" data-go="order">Ordina<small>Bar e cucina, consegna in pista</small></button>';
       h += '<button class="act" data-go="addplayer">Aggiungi giocatore<small>Un altro cliente entra in partita</small></button>';
-      h += '<button class="act" data-go="bill">Vedi il conto<small>' + eur(laneCost() + ordersTotalAt("lane7")) + " finora</small></button>";
-      h += '<button class="act warn" data-go="close">Chiudi pista<small>Ferma il cronometro</small></button>';
+      h += '<button class="act" data-go="bill">Vedi il conto<small>' + eur(laneShare()) + " a testa, più le consumazioni</small></button>";
+      h += '<button class="act warn" data-go="close">Chiudi pista<small>Libera la pista per il prossimo gruppo</small></button>';
       h += '<button class="ghost" data-go="back" style="margin-top:6px">Torna al punteggio</button>';
       return h;
     }
@@ -529,8 +549,11 @@
 
     if(S.view === "bill"){
       h += "<h1>Conto pista 7</h1>";
-      h += '<div class="card"><div class="row"><span>Pista · ' + minutes() + " min</span>"
-         + '<span class="num">' + eur(laneCost()) + "</span></div>";
+      h += '<div class="card"><div class="row"><span>Pista · '
+         + laneBlocks() + (laneBlocks() === 1 ? " ora prepagata" : " ore prepagate")
+         + '</span><span class="num">' + eur(laneCost()) + "</span></div>";
+      h += '<div class="row"><span>Quota a testa · ' + lanePeople() + " giocatori</span>"
+         + '<span class="num">' + eur(laneShare()) + "</span></div>";
       if(ordersAt("lane7").length === 0){
         h += '<div class="row"><span style="color:var(--muted)">Nessuna consumazione</span><span></span></div>';
       } else {
@@ -541,15 +564,17 @@
       }
       h += '<div class="row"><span style="font-weight:600">Totale</span>'
          + '<span class="num" style="font-weight:600">' + eur(laneCost() + ordersTotalAt("lane7")) + "</span></div></div>";
-      h += '<p class="note">Ogni riga porta il nome di chi ha ordinato. Alla cassa si divide con un tocco.</p>';
+      h += '<p class="note">La pista si divide in parti uguali fra i giocatori. Le consumazioni restano a chi le ha ordinate.</p>';
       h += '<button class="ghost" data-go="menu">Indietro</button>';
       return h;
     }
 
     // punteggio / stato partita
     h += '<div class="tiny">Pista 7 · in corso</div>';
-    h += '<div class="big">' + minutes() + '<span style="font-size:22px"> min</span></div>';
-    h += '<p style="margin-top:4px">' + eur(laneCost() + ordersTotalAt("lane7")) + " finora</p>";
+    h += '<div class="big">' + laneLeft() + '<span style="font-size:22px"> min al termine</span></div>';
+    h += '<p style="margin-top:4px">' + laneBlocks()
+       + (laneBlocks() === 1 ? " ora prepagata · " : " ore prepagate · ") + eur(laneCost())
+       + ", " + eur(laneShare()) + " a testa</p>";
     h += "<h2>Giocatori</h2>";
     S.players.forEach(function(id){
       h += '<div class="pill on">' + esc(nickOf(id)) + "</div>";
@@ -567,8 +592,11 @@
       h += '<div class="tiny">Biliardo 3 · chiuso</div><h1>Sessione conclusa</h1>';
       h += '<div class="card ok"><div class="tiny">Durata</div>'
          + '<div class="big">' + tableMinutes() + "<span style=\"font-size:22px\"> min</span></div></div>";
-      h += '<div class="card"><div class="row"><span>Tavolo · ' + tableMinutes() + " min × "
-         + eur(RATE_TABLE) + '</span><span class="num">' + eur(tableCost()) + "</span></div>";
+      h += '<div class="card"><div class="row"><span>Tavolo · ' + tableSpan()
+         + ' min prepagati</span><span class="num">' + eur(tableCost()) + "</span></div>";
+      h += '<div class="row"><span>Diviso per ' + tablePeople()
+         + (tablePeople() === 1 ? " persona" : " persone") + '</span><span class="num">'
+         + eur(tableShare()) + " a testa</span></div>";
       if(ordersAt("table3").length){
         h += '<div class="row"><span>Consumazioni</span><span class="num">'
            + eur(ordersTotalAt("table3")) + "</span></div>";
@@ -583,7 +611,7 @@
     if(!S.tableOpenAt){
       return '<div class="tiny">Biliardo 3 · libero</div><h1>Lo stesso gesto</h1>'
         + '<div class="tapzone"><strong>Riconosci il cliente</strong>'
-        + "Il tavolo si accende e parte il cronometro</div>"
+        + "Si apre con " + TABLE_BLOCK + " minuti prepagati a " + eur(TABLE_PRICE) + "</div>"
         + '<div class="card"><p style="margin:0">Nessuna tecnologia diversa, nessuna interfaccia nuova: '
         + "cambia solo cosa c'è dall'altra parte del lettore.</p></div>";
     }
@@ -591,9 +619,10 @@
     if(S.view === "tmenu"){
       h += '<div class="tiny">' + esc(nickOf(S.actor)) + "</div><h1>Cosa vuoi fare?</h1>";
       h += '<button class="act" data-go="torder">Ordina<small>Bar e cucina, consegna al tavolo</small></button>';
+      h += '<button class="act" data-go="taddplayer">Aggiungi giocatore<small>Un altro cliente entra al tavolo</small></button>';
       h += '<button class="act" data-go="tbill">Vedi il conto<small>'
-         + eur(tableCost() + ordersTotalAt("table3")) + " finora</small></button>";
-      h += '<button class="act warn" data-go="close">Chiudi tavolo<small>Ferma il cronometro</small></button>';
+         + eur(tableShare()) + " a testa, più le consumazioni</small></button>";
+      h += '<button class="act warn" data-go="close">Chiudi tavolo<small>Libera il tavolo per il prossimo</small></button>';
       h += '<button class="ghost" data-go="back" style="margin-top:6px">Torna al tavolo</button>';
       return h;
     }
@@ -608,10 +637,19 @@
       return h;
     }
 
+    if(S.view === "taddplayer"){
+      return "<h1>Aggiungi giocatore</h1>"
+        + '<div class="tapzone"><strong>Riconosci il cliente</strong>'
+        + "Entra al tavolo e la quota si ricalcola</div>"
+        + '<button class="ghost" data-go="tmenu">Indietro</button>';
+    }
+
     if(S.view === "tbill"){
       h += "<h1>Conto biliardo 3</h1>";
-      h += '<div class="card"><div class="row"><span>Tavolo · ' + tableMinutes() + " min</span>"
-         + '<span class="num">' + eur(tableCost()) + "</span></div>";
+      h += '<div class="card"><div class="row"><span>Tavolo · ' + tableSpan()
+         + ' min prepagati</span><span class="num">' + eur(tableCost()) + "</span></div>";
+      h += '<div class="row"><span>Quota a testa · ' + tablePeople() + " giocatori</span>"
+         + '<span class="num">' + eur(tableShare()) + "</span></div>";
       if(ordersAt("table3").length === 0){
         h += '<div class="row"><span style="color:var(--muted)">Nessuna consumazione</span><span></span></div>';
       } else {
@@ -622,18 +660,21 @@
       }
       h += '<div class="row"><span style="font-weight:600">Totale</span>'
          + '<span class="num" style="font-weight:600">' + eur(tableCost() + ordersTotalAt("table3")) + "</span></div></div>";
-      h += '<p class="note">Ogni riga porta il nome di chi ha ordinato, come in pista.</p>';
+      h += '<p class="note">Il tavolo si divide fra i giocatori iscritti. Le consumazioni restano a chi le ha ordinate.</p>';
       h += '<button class="ghost" data-go="tmenu">Indietro</button>';
       return h;
     }
 
     h += '<div class="tiny">Biliardo 3 · in corso</div>';
-    h += '<div class="big">' + tableMinutes() + '<span style="font-size:22px"> min</span></div>';
-    h += '<p style="margin-top:4px">' + eur(tableCost() + ordersTotalAt("table3")) + " finora</p>";
-    h += "<h2>Aperto da</h2>";
-    h += '<div class="pill on">' + esc(nickOf(S.tableOwner) || "cliente uscito") + "</div>";
+    h += '<div class="big">' + tableLeft() + '<span style="font-size:22px"> min al termine</span></div>';
+    h += '<p style="margin-top:4px">' + tableSpan() + " minuti prepagati · " + eur(tableCost())
+       + ", " + eur(tableShare()) + " a testa</p>";
+    h += "<h2>Giocatori</h2>";
+    S.tablePlayers.forEach(function(id){
+      h += '<div class="pill on">' + esc(nickOf(id) || "cliente uscito") + "</div>";
+    });
     h += '<div class="tapzone" style="margin-top:18px"><strong>Riconosci il cliente</strong>'
-       + "Ordina, controlla il conto o chiudi il tavolo</div>";
+       + "Un giocatore già iscritto apre il menù. Uno nuovo entra al tavolo.</div>";
     return h;
   }
 
@@ -687,14 +728,23 @@
     var mine = S.orders.filter(function(o){ return o.by === nick; });
     var h = '<div class="tiny">Usciti ' + done + " di " + S.handed + "</div>";
     h += "<h1>" + esc(nick) + "</h1>";
-    h += '<div class="card"><div class="row"><span>Pista 7</span><span class="num">'
-       + (S.openedAt ? minutes() + " min" : "—") + "</span></div>";
-    if(S.tableOpenAt){
-      h += '<div class="row"><span>Biliardo 3</span><span class="num">'
-         + tableMinutes() + " min</span></div>";
+    var played = S.openedAt && S.players.indexOf(S.actor) >= 0;
+    var share  = played ? laneShare() : 0;
+    var spent  = mine.reduce(function(a,o){ return a + o.price; }, 0);
+    var atTable = S.tableOpenAt && S.tablePlayers.indexOf(S.actor) >= 0;
+    var tcost   = atTable ? tableShare() : 0;
+
+    h += '<div class="card"><div class="row"><span>Quota pista 7'
+       + (played ? " · 1 di " + lanePeople() : "") + '</span><span class="num">'
+       + (played ? eur(share) : "—") + "</span></div>";
+    if(atTable){
+      h += '<div class="row"><span>Quota biliardo 3 · 1 di ' + tablePeople() + "</span>"
+         + '<span class="num">' + eur(tcost) + "</span></div>";
     }
     h += '<div class="row"><span>Sue consumazioni</span><span class="num">'
-       + (mine.length ? eur(mine.reduce(function(a,o){return a+o.price;},0)) : "—") + "</span></div>";
+       + (mine.length ? eur(spent) : "—") + "</span></div>";
+    h += '<div class="row"><span style="font-weight:600">Suo totale</span>'
+       + '<span class="num" style="font-weight:600;font-size:21px">' + eur(share + spent + tcost) + "</span></div>";
     h += '<div class="row"><span>Risultati</span><span class="num">'
        + (S.bands[S.actor].email ? esc(maskEmail(S.bands[S.actor].email)) : "solo QR") + "</span></div></div>";
     h += '<button class="act warn" data-go="return">Registra l&rsquo;uscita'
@@ -791,7 +841,6 @@
     } else if(go === "return"){
       var gone = S.actor;
       delete S.bands[gone];
-      S.players = S.players.filter(function(p){ return p !== gone; });
       S.actor = null; S.view = null;
       if(activeBands() === 0){
         var st = S.station;
